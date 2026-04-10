@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   summarize:
     runs-on: ubuntu-latest
@@ -27,24 +32,29 @@ jobs:
           exit 0
 
       - name: Get diff
+        if: "startsWith(steps.check.outputs.msg, 'feat')"
         run: |
           git fetch origin main
           git diff origin/main...HEAD > diff.txt
 
       - name: Setup Node.js
+        if: "startsWith(steps.check.outputs.msg, 'feat')"
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
       - name: Install dependencies
+        if: "startsWith(steps.check.outputs.msg, 'feat')"
         run: npm install
 
       - name: Run AI Summary
+        if: "startsWith(steps.check.outputs.msg, 'feat')"
         run: node summarize.js
         env:
           DEEPSEEK_API_KEY: ${{ secrets.PR }}
 
       - name: Comment PR
+        if: "startsWith(steps.check.outputs.msg, 'feat') && github.event.pull_request.head.repo.fork == false"
         uses: actions/github-script@v6
         with:
           script: |
