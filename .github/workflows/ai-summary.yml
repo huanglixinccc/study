@@ -1,5 +1,6 @@
 name: AI PR Summary
 
+# 触发时机：当 PR 被创建或有新提交同步到 PR 时执行
 on:
   pull_request:
     types: [opened, synchronize]
@@ -11,49 +12,60 @@ permissions:
 
 jobs:
   summarize:
+    # 运行环境：GitHub 托管的 Ubuntu
     runs-on: ubuntu-latest
 
     steps:
+      # 1) 拉取仓库代码，fetch-depth: 0 表示完整历史（后面 git diff 需要）
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
+      # 2) 读取最近一次提交标题，并作为 step 输出变量 msg
       - name: Get latest commit message
         id: check
         run: |
           msg=$(git log -1 --pretty=%s)
           echo "msg=$msg" >> $GITHUB_OUTPUT
 
+      # 3) 如果提交标题不是 feat 开头，打印提示并结束该 step
+      # 注意：这里只是结束当前 step，不会自动跳过后续 step
       - name: Skip if not feat
         if: "!startsWith(steps.check.outputs.msg, 'feat')"
         run: |
           echo "Not a feat commit, skipping..."
           exit 0
 
+      # 4) 生成和 main 分支对比的差异文件，供 summarize.js 分析
       - name: Get diff
         if: "startsWith(steps.check.outputs.msg, 'feat')"
         run: |
           git fetch origin main
           git diff origin/main...HEAD > diff.txt
 
+      # 5) 安装 Node.js 运行环境
       - name: Setup Node.js
         if: "startsWith(steps.check.outputs.msg, 'feat')"
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
+      # 6) 安装 package.json 中声明的依赖
       - name: Install dependencies
         if: "startsWith(steps.check.outputs.msg, 'feat')"
         run: npm install
 
+      # 7) 调用你自己的总结脚本，输出 summary.txt
+      # secrets.PR 会作为 DEEPSEEK_API_KEY 注入脚本环境变量
       - name: Run AI Summary
         if: "startsWith(steps.check.outputs.msg, 'feat')"
         run: node summarize.js
         env:
           DEEPSEEK_API_KEY: ${{ secrets.PR }}
 
+      # 8) 把 summary.txt 内容作为评论发布到当前 PR
       - name: Comment PR
         if: "startsWith(steps.check.outputs.msg, 'feat') && github.event.pull_request.head.repo.fork == false"
         uses: actions/github-script@v6
