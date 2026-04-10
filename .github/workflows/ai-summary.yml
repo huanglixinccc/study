@@ -1,0 +1,58 @@
+name: AI PR Summary
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get latest commit message
+        id: check
+        run: |
+          msg=$(git log -1 --pretty=%s)
+          echo "msg=$msg" >> $GITHUB_OUTPUT
+
+      - name: Skip if not feat
+        if: "!startsWith(steps.check.outputs.msg, 'feat')"
+        run: |
+          echo "Not a feat commit, skipping..."
+          exit 0
+
+      - name: Get diff
+        run: |
+          git fetch origin main
+          git diff origin/main...HEAD > diff.txt
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run AI Summary
+        run: node summarize.js
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.PR }}
+
+      - name: Comment PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('summary.txt', 'utf-8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
